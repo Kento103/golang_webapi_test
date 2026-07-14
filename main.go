@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/joho/godotenv"
 )
@@ -150,10 +151,18 @@ func main() {
 			ctx.JSON(http.StatusBadRequest, gin.H{
 				"error": err.Error(),
 			})
+			return
+		}
+
+		// パスワードをハッシュ化する
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "パスワードのハッシュ化に失敗しました"})
+			return
 		}
 
 		// Go-langはデフォルトでプリペアドステートメント有効。（SQLはJava Servletのように命令すれば良い。）
-		result, err := db.Exec("INSERT INTO t_user (user_id, role, password) VALUES (?, ?, ?)", req.UserID, req.Role, req.Password)
+		result, err := db.Exec("INSERT INTO t_user (user_id, role, password) VALUES (?, ?, ?)", req.UserID, req.Role, string(hashedPassword))
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
