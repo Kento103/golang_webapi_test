@@ -40,6 +40,11 @@ type UpdateUserRequest struct {
 	Role string `json:"role" binding:"required"`
 }
 
+type LoginUserRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
 func main() {
 	// .env読みこみ
 	if err := godotenv.Load(); err != nil {
@@ -141,6 +146,52 @@ func main() {
 
 		ctx.JSON(http.StatusOK, gin.H{
 			"users": users,
+		})
+	})
+
+	// ログイン
+	router.POST("/login", func(ctx *gin.Context) {
+		var req LoginUserRequest
+		if err := ctx.ShouldBindBodyWithJSON(&req); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		// DBからユーザーを検索
+		var user User
+		var hashedPassword string
+		err := db.QueryRow("SELECT id, user_id, role, password FROM t_user WHERE user_id = ?", req.UserID).
+			Scan(&user.ID, &user.UserID, &user.Role, &hashedPassword)
+		
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusUnauthorized, gin.H{
+				"error": "ユーザーが見つかりません",
+			})
+			return
+		} else if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		// パスワードを検証
+		err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(req.Password))
+		if err != nil {
+			ctx.JSON(http.StatusUnauthorized, gin.H{
+				"error": "パスワードが正しくありません",
+			})
+			return
+		}
+
+		// ログイン成功
+		ctx.JSON(http.StatusOK, gin.H{
+			"message": "ログインに成功しました",
+			"id":      user.ID,
+			"user_id": user.UserID,
+			"role":    user.Role,
 		})
 	})
 
