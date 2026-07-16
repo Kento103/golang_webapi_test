@@ -210,12 +210,44 @@ func main() {
 			return
 		}
 
+		// Cookieに保存する
+		cookie := &http.Cookie{
+			Name:     "auth_token",
+			Value:    tokenString,
+			Path:     "/",
+			MaxAge:   24 * 60 * 60,
+			HttpOnly: true,
+			Secure:   false,
+			SameSite: http.SameSiteLaxMode,
+		}
+		http.SetCookie(ctx.Writer, cookie)
+
 		// ログイン成功
 		ctx.JSON(http.StatusOK, gin.H{
-			"message":    "ログインに成功しました",
-			"token":      tokenString,
-			"token_type": "Bearer",
+			"message": "ログインに成功しました",
 		})
+	})
+
+	// ログアウト
+	router.POST("/logout", func(ctx *gin.Context) {
+		tokenString, err := ctx.Cookie("auth_token")
+		if err != nil {
+			ctx.JSON(http.StatusUnauthorized, gin.H{
+				"error": "認証されていません",
+			})
+			return
+		}
+		// 試験用
+		fmt.Print(tokenString)
+
+		cookie := &http.Cookie{
+			Name:     "auth_token",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+		}
+		http.SetCookie(ctx.Writer, cookie)
 	})
 
 	// 新規レコード登録
