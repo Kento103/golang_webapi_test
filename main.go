@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"database/sql"
 	"math/rand"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/joho/godotenv"
@@ -41,7 +43,7 @@ type UpdateUserRequest struct {
 }
 
 type LoginUserRequest struct {
-	UserID string `json:"user_id" binding:"required"`
+	UserID   string `json:"user_id" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -164,7 +166,7 @@ func main() {
 		var hashedPassword string
 		err := db.QueryRow("SELECT id, user_id, role, password FROM t_user WHERE user_id = ?", req.UserID).
 			Scan(&user.ID, &user.UserID, &user.Role, &hashedPassword)
-		
+
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusUnauthorized, gin.H{
 				"error": "ユーザーが見つかりません",
@@ -186,12 +188,33 @@ func main() {
 			return
 		}
 
+		// JWTトークンを返す
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": "JWT_SECRETが設定されていません",
+			})
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"sub":  user.UserID,
+			"role": user.Role,
+			"exp":  time.Now().Add(24 * time.Hour).Unix(),
+		})
+
+		tokenString, err := token.SignedString([]byte(secret))
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": "トークン生成に失敗しました",
+			})
+			return
+		}
+
 		// ログイン成功
 		ctx.JSON(http.StatusOK, gin.H{
-			"message": "ログインに成功しました",
-			"id":      user.ID,
-			"user_id": user.UserID,
-			"role":    user.Role,
+			"message":    "ログインに成功しました",
+			"token":      tokenString,
+			"token_type": "Bearer",
 		})
 	})
 
